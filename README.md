@@ -39,7 +39,9 @@ python cli.py --workbook "HardTimeReport_New (2).xls"
 | `htc_management/analytics/preparation.py` | Column normalisation, date parsing, enriched metrics, aircraft parsing |
 | `htc_management/analytics/summaries.py` | Headline KPI computation (`ComponentSummary`) |
 | `htc_management/analytics/breakdowns.py` | Aircraft/part/due bucket aggregations |
-| `htc_management/analytics/visuals.py` | Plotly figures used by the dashboard |
+| `htc_management/analytics/profiling.py` | Column dtype diagnostics shown in the UI |
+| `htc_management/analytics/timeseries.py` | Weekly due-date resampling + statsmodels OLS trend detection |
+| `htc_management/analytics/visuals.py` | Plotly + Matplotlib figures (time series, scatter, histogram, etc.) |
 | `htc_management/reporting/exporters.py` | Excel + PDF export helpers |
 
 ## Testing

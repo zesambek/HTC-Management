@@ -9,6 +9,8 @@ from htc_management.analytics.breakdowns import (
     build_part_breakdown,
     build_due_bucket_breakdown,
 )
+from htc_management.analytics.profiling import analyze_column_types
+from htc_management.analytics.timeseries import build_due_time_series
 
 
 def _prepared_sample() -> pd.DataFrame:
@@ -62,3 +64,17 @@ def test_breakdowns_return_expected_shapes():
     buckets = build_due_bucket_breakdown(prepared)
     assert {"Due Bucket", "Components"}.issubset(buckets.columns)
     assert not buckets.empty
+
+
+def test_analyze_column_types_generates_metrics():
+    prepared = _prepared_sample()
+    profile = analyze_column_types(prepared)
+    assert {"Column", "Pandas dtype", "Numeric-compatible %"}.issubset(profile.columns)
+    assert not profile.empty
+
+
+def test_build_due_time_series_returns_frame_and_summary():
+    prepared = _prepared_sample()
+    result = build_due_time_series(prepared, freq="D")
+    assert {"period", "due_count", "trend"}.issubset(result.frame.columns)
+    assert result.frame["due_count"].sum() == len(prepared.dropna(subset=["due_date"]))

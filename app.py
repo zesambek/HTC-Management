@@ -15,12 +15,17 @@ from htc_management.analytics import (
     build_aircraft_breakdown,
     build_part_breakdown,
     build_due_bucket_breakdown,
+    analyze_column_types,
+    build_due_time_series,
 )
 from htc_management.analytics.visuals import (
     build_aircraft_due_chart,
     build_due_bucket_chart,
     build_part_exposure_chart,
     build_timeline_chart,
+    build_due_time_series_chart,
+    build_overdue_scatter_chart,
+    create_days_distribution_plot,
 )
 from htc_management.reporting import export_excel_report, build_pdf_report
 
@@ -65,6 +70,9 @@ def main() -> None:
     st.subheader("Summary metrics")
     st.dataframe(summary_to_frame(summary), use_container_width=True, hide_index=True)
 
+    st.subheader("Column type overview")
+    st.dataframe(analyze_column_types(prepared), use_container_width=True, hide_index=True)
+
     col1, col2 = st.columns(2)
     with col1:
         st.plotly_chart(build_aircraft_due_chart(prepared), use_container_width=True)
@@ -85,6 +93,25 @@ def main() -> None:
         st.dataframe(build_part_breakdown(prepared), use_container_width=True)
     with tabs[2]:
         st.dataframe(build_due_bucket_breakdown(prepared), use_container_width=True)
+
+    st.subheader("Time-series trend (weekly)")
+    ts_result = build_due_time_series(prepared)
+    st.plotly_chart(build_due_time_series_chart(ts_result.frame), use_container_width=True)
+    if ts_result.model_summary:
+        if ts_result.slope is not None:
+            st.caption(f"OLS slope: {ts_result.slope:.2f} components/week")
+        with st.expander("Time-series regression details"):
+            st.code(ts_result.model_summary)
+
+    st.subheader("Overdue scatter diagnostics")
+    scatter_fig, scatter_summary = build_overdue_scatter_chart(prepared)
+    st.plotly_chart(scatter_fig, use_container_width=True)
+    if scatter_summary:
+        with st.expander("Overdue vs age OLS summary"):
+            st.code(scatter_summary)
+
+    st.subheader("Distribution of days until due")
+    st.pyplot(create_days_distribution_plot(prepared), clear_figure=True)
 
     st.subheader("Downloads")
     excel_bytes = export_excel_report(prepared, summary)
