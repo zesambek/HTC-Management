@@ -82,26 +82,28 @@ def build_summary(df: pd.DataFrame) -> ComponentSummary:
 
 def summary_to_frame(summary: ComponentSummary) -> pd.DataFrame:
     """Convert summary metrics into a DataFrame for export or display."""
-    payload: Dict[str, object] = {
-        "Metric": [
-            "Total components",
-            "Unique parts",
-            "Unique aircraft",
-            "Overdue components",
-            "Due within 30 days",
-            "Average days until due",
-            "Average days overdue",
-            "Report generated",
-        ],
-        "Value": [
-            summary.total_components,
-            summary.unique_parts,
-            summary.unique_aircraft,
-            summary.overdue_components,
-            summary.due_within_30_days,
-            summary.average_days_until_due,
-            summary.average_days_overdue,
-            summary.report_date.strftime("%Y-%m-%d"),
-        ],
-    }
-    return pd.DataFrame(payload)
+    metrics = [
+        ("Total components", summary.total_components),
+        ("Unique parts", summary.unique_parts),
+        ("Unique aircraft", summary.unique_aircraft),
+        ("Overdue components", summary.overdue_components),
+        ("Due within 30 days", summary.due_within_30_days),
+        ("Average days until due", summary.average_days_until_due),
+        ("Average days overdue", summary.average_days_overdue),
+        ("Report generated", summary.report_date.strftime("%Y-%m-%d")),
+    ]
+
+    return pd.DataFrame(
+        {
+            "Metric": [label for label, _ in metrics],
+            "Value": [_format_metric_value(value) for _, value in metrics],
+        }
+    )
+
+
+def _format_metric_value(value: object) -> str:
+    if value is None or (isinstance(value, float) and (pd.isna(value))):
+        return "—"
+    if isinstance(value, float):
+        return f"{value:.2f}"
+    return str(value)
