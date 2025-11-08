@@ -5,19 +5,15 @@ from __future__ import annotations
 import pandas as pd
 
 
-def _ensure_dataframe(df: pd.DataFrame, required: set[str]) -> pd.DataFrame:
-    missing = required - set(df.columns)
-    if missing:
-        raise KeyError(f"Missing required columns: {', '.join(sorted(missing))}")
-    return df
-
-
 def build_aircraft_breakdown(df: pd.DataFrame) -> pd.DataFrame:
     """Aggregate overdue exposure by aircraft registration."""
-    if df.empty:
+    if df.empty or "aircraft_registration" not in df.columns:
         return pd.DataFrame(columns=["Aircraft", "Components", "Overdue", "Due ≤ 30d"])
 
-    working = _ensure_dataframe(df, {"aircraft_registration", "is_overdue", "days_until_due"})
+    if "is_overdue" not in df.columns or "days_until_due" not in df.columns:
+        return pd.DataFrame(columns=["Aircraft", "Components", "Overdue", "Due ≤ 30d"])
+
+    working = df.copy()
     grouped = working.groupby("aircraft_registration", dropna=False)
 
     result = grouped.agg(
@@ -39,8 +35,11 @@ def build_part_breakdown(df: pd.DataFrame, *, top_n: int = 15) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame(columns=["Part Name", "Occurrences", "Overdue"])
 
-    required = {"part_name", "is_overdue"}
-    working = _ensure_dataframe(df, required)
+    part_column = _resolve_part_column(df)
+    if part_column is None or "is_overdue" not in df.columns:
+        return pd.DataFrame(columns=["Part Name", "Occurrences", "Overdue"])
+
+    working = df.rename(columns={part_column: "part_name"})
     grouped = working.groupby("part_name", dropna=False).agg(
         occurrences=("part_name", "size"),
         overdue=("is_overdue", "sum"),
@@ -59,8 +58,19 @@ def build_due_bucket_breakdown(df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=["Due Bucket", "Components"])
 
     if "due_bucket" not in df.columns:
-        raise KeyError("Column 'due_bucket' not present in dataframe.")
+        return pd.DataFrame(columns=["Due Bucket", "Components"])
 
     grouped = df.groupby("due_bucket", dropna=False).size().reset_index(name="Components")
     grouped.rename(columns={"due_bucket": "Due Bucket"}, inplace=True)
     return grouped.sort_values("Components", ascending=False).reset_index(drop=True)
+
+
+def _resolve_part_column(df: pd.DataFrame) -> str | None:
+    if "part_name" in df.columns:
+        return "part_name"
+
+    for column in df.columns:
+        label = str(column).strip().lower()
+        if "part name" in label or label.startswith("part") or "component" in label:
+            return column
+    return None
