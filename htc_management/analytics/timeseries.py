@@ -53,6 +53,6 @@ def build_due_time_series(df: pd.DataFrame, freq: str = "W") -> TimeSeriesResult
         model = sm.OLS(counts["due_count"], X).fit()
         counts["trend"] = model.predict(X)
         model_summary = model.summary().as_text()
-        slope = float(model.params[1])
+        slope = float(model.params.iloc[1]) if len(model.params) > 1 else None
 
     return TimeSeriesResult(frame=counts, model_summary=model_summary, slope=slope)

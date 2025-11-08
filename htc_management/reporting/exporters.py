@@ -8,7 +8,12 @@ from typing import Iterable, Tuple
 
 import pandas as pd
 
-from ..analytics.breakdowns import build_aircraft_breakdown, build_part_breakdown, build_due_bucket_breakdown
+from ..analytics.breakdowns import (
+    build_aircraft_breakdown,
+    build_part_breakdown,
+    build_due_bucket_breakdown,
+    build_config_slot_due_table,
+)
 from ..analytics.summaries import ComponentSummary, summary_to_frame
 
 try:  # Optional dependency for PDF output
@@ -50,6 +55,10 @@ def export_excel_report(
         buckets = build_due_bucket_breakdown(prepared_df)
         if not buckets.empty:
             buckets.to_excel(writer, sheet_name="Due Buckets", index=False)
+
+        config_slots = build_config_slot_due_table(prepared_df)
+        if not config_slots.empty:
+            config_slots.to_excel(writer, sheet_name="Config Slot Schedule", index=False)
 
     buffer.seek(0)
     if path is None:
@@ -97,6 +106,10 @@ def build_pdf_report(prepared_df: pd.DataFrame, summary: ComponentSummary) -> by
     buckets = build_due_bucket_breakdown(prepared_df)
     if not buckets.empty:
         story.extend([Paragraph("Due Bucket Mix", styles["Heading2"]), _table(buckets), Spacer(1, 12)])
+
+    config_slots = build_config_slot_due_table(prepared_df)
+    if not config_slots.empty:
+        story.extend([Paragraph("Config Slot Schedule", styles["Heading2"]), _table(config_slots.head(15)), Spacer(1, 12)])
 
     doc.build(story)
     buffer.seek(0)

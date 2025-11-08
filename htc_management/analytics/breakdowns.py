@@ -65,6 +65,62 @@ def build_due_bucket_breakdown(df: pd.DataFrame) -> pd.DataFrame:
     return grouped.sort_values("Components", ascending=False).reset_index(drop=True)
 
 
+def build_config_slot_due_table(df: pd.DataFrame, *, top_n: int = 20) -> pd.DataFrame:
+    """Return aggregated due-date stats per config slot."""
+    required = {"config_slot", "due_date"}
+    if df.empty or not required.issubset(df.columns):
+        return pd.DataFrame(
+            columns=["Config Slot", "Components", "Earliest Due", "Median Due", "Latest Due", "Avg Days Until Due"]
+        )
+
+    working = (
+        df.dropna(subset=["config_slot", "due_date"])
+        .assign(
+            due_date=lambda frame: pd.to_datetime(frame["due_date"]).dt.tz_localize(None),
+            days_until_due=lambda frame: frame.get("days_until_due"),
+        )
+    )
+    if working.empty:
+        return pd.DataFrame(
+            columns=["Config Slot", "Components", "Earliest Due", "Median Due", "Latest Due", "Avg Days Until Due"]
+        )
+
+    top_slots = working["config_slot"].value_counts().head(top_n).index
+    filtered = working[working["config_slot"].isin(top_slots)].copy()
+    if filtered.empty:
+        return pd.DataFrame(
+            columns=["Config Slot", "Components", "Earliest Due", "Median Due", "Latest Due", "Avg Days Until Due"]
+        )
+
+    summary = (
+        filtered.groupby("config_slot", dropna=False)
+        .agg(
+            components=("config_slot", "size"),
+            earliest_due=("due_date", "min"),
+            median_due=("due_date", "median"),
+            latest_due=("due_date", "max"),
+            avg_days_until=("days_until_due", "mean"),
+        )
+        .reset_index()
+        .rename(
+            columns={
+                "config_slot": "Config Slot",
+                "components": "Components",
+                "earliest_due": "Earliest Due",
+                "median_due": "Median Due",
+                "latest_due": "Latest Due",
+                "avg_days_until": "Avg Days Until Due",
+            }
+        )
+    )
+
+    if "Avg Days Until Due" in summary.columns:
+        summary["Avg Days Until Due"] = summary["Avg Days Until Due"].round(1)
+
+    summary = summary.sort_values(["Earliest Due", "Components"], ascending=[True, False]).reset_index(drop=True)
+    return summary
+
+
 def _resolve_part_column(df: pd.DataFrame) -> str | None:
     if "part_name" in df.columns:
         return "part_name"

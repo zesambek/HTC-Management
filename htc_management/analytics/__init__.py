@@ -2,7 +2,12 @@
 
 from .preparation import prepare_component_dataframe
 from .summaries import ComponentSummary, build_summary, summary_to_frame
-from .breakdowns import build_aircraft_breakdown, build_part_breakdown, build_due_bucket_breakdown
+from .breakdowns import (
+    build_aircraft_breakdown,
+    build_part_breakdown,
+    build_due_bucket_breakdown,
+    build_config_slot_due_table,
+)
 from .visuals import (
     build_due_bucket_chart,
     build_aircraft_due_chart,
@@ -24,6 +29,7 @@ __all__ = [
     "build_aircraft_breakdown",
     "build_part_breakdown",
     "build_due_bucket_breakdown",
+    "build_config_slot_due_table",
     "build_due_bucket_chart",
     "build_aircraft_due_chart",
     "build_part_exposure_chart",

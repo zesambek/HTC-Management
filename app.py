@@ -6,6 +6,7 @@ from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
+import plotly.io as pio
 import streamlit as st
 
 from htc_management import DEFAULT_REPORT_PATH, load_report, prepare_component_dataframe
@@ -18,6 +19,7 @@ from htc_management.analytics import (
     analyze_column_types,
     build_due_time_series,
     build_config_slot_due_scatter,
+    build_config_slot_due_table,
 )
 from htc_management.analytics.visuals import (
     build_aircraft_due_chart,
@@ -48,6 +50,14 @@ def _download_bytes(data: bytes, *, file_name: str, mime: str, label: str, key: 
         use_container_width=True,
         key=key,
     )
+
+
+def _figure_to_pdf_bytes(fig):
+    try:
+        return pio.to_image(fig, format="pdf")
+    except Exception as exc:  # noqa: BLE001
+        st.warning(f"PDF export unavailable for this chart: {exc}")
+        return None
 
 
 def main() -> None:
@@ -115,7 +125,28 @@ def main() -> None:
     st.pyplot(create_days_distribution_plot(prepared), clear_figure=True)
 
     st.subheader("Config slot vs due date")
-    st.plotly_chart(build_config_slot_due_scatter(prepared), use_container_width=True)
+    config_slot_fig = build_config_slot_due_scatter(prepared)
+    st.plotly_chart(config_slot_fig, use_container_width=True)
+    pdf_bytes = _figure_to_pdf_bytes(config_slot_fig)
+    if pdf_bytes:
+        _download_bytes(
+            pdf_bytes,
+            file_name="config_slot_due_scatter.pdf",
+            mime="application/pdf",
+            label="Download config-slot plot (PDF)",
+            key="config_slot_pdf",
+        )
+    slot_table = build_config_slot_due_table(prepared)
+    st.dataframe(slot_table, use_container_width=True)
+    if not slot_table.empty:
+        st.download_button(
+            "Download config-slot schedule (CSV)",
+            slot_table.to_csv(index=False).encode("utf-8"),
+            "config_slot_due_schedule.csv",
+            "text/csv",
+            use_container_width=True,
+            key="config_slot_csv",
+        )
 
     st.subheader("Downloads")
     excel_bytes = export_excel_report(prepared, summary)

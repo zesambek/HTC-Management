@@ -8,6 +8,7 @@ from htc_management.analytics.breakdowns import (
     build_aircraft_breakdown,
     build_part_breakdown,
     build_due_bucket_breakdown,
+    build_config_slot_due_table,
 )
 from htc_management.analytics.profiling import analyze_column_types
 from htc_management.analytics.timeseries import build_due_time_series
@@ -88,3 +89,9 @@ def test_build_config_slot_due_scatter_returns_figure():
     prepared = _prepared_sample()
     fig = build_config_slot_due_scatter(prepared, top_n=5)
     assert fig.data is not None
+
+
+def test_build_config_slot_due_table_outputs_expected_columns():
+    prepared = _prepared_sample()
+    table = build_config_slot_due_table(prepared, top_n=5)
+    assert {"Config Slot", "Components", "Earliest Due"}.issubset(table.columns)
