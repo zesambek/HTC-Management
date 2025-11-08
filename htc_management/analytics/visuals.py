@@ -181,3 +181,41 @@ def create_days_distribution_plot(df: pd.DataFrame):
     ax.legend()
     fig.tight_layout()
     return fig
+
+
+def build_config_slot_due_scatter(df: pd.DataFrame, *, top_n: int = 20):
+    """Scatter plot of due dates by config slot (top N most common)."""
+    required = {"config_slot", "due_date"}
+    if df.empty or not required.issubset(df.columns):
+        return _empty_figure("Config slot or due date data unavailable.")
+
+    working = df.dropna(subset=["config_slot", "due_date"]).copy()
+    if working.empty:
+        return _empty_figure("No config slot entries with due dates available.")
+
+    counts = working["config_slot"].value_counts().head(top_n).index
+    filtered = working[working["config_slot"].isin(counts)].copy()
+    if filtered.empty:
+        return _empty_figure("Insufficient data after filtering top config slots.")
+
+    filtered["due_date"] = pd.to_datetime(filtered["due_date"]).dt.tz_localize(None)
+
+    hover_fields: list[str] = []
+    if "part_name" in filtered.columns:
+        hover_fields.append("part_name")
+    if "task_code" in filtered.columns:
+        hover_fields.append("task_code")
+
+    color_field = "aircraft_registration" if "aircraft_registration" in filtered.columns else None
+
+    fig = px.scatter(
+        filtered.sort_values("due_date"),
+        x="due_date",
+        y="config_slot",
+        color=color_field,
+        hover_data=hover_fields or None,
+        title=f"Due dates by config slot (top {len(counts)} slots)",
+        labels={"due_date": "Due date", "config_slot": "Config slot"},
+    )
+    fig.update_layout(height=420, yaxis={"categoryorder": "total ascending"})
+    return fig

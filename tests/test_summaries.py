@@ -11,6 +11,7 @@ from htc_management.analytics.breakdowns import (
 )
 from htc_management.analytics.profiling import analyze_column_types
 from htc_management.analytics.timeseries import build_due_time_series
+from htc_management.analytics.visuals import build_config_slot_due_scatter
 
 
 def _prepared_sample() -> pd.DataFrame:
@@ -20,16 +21,19 @@ def _prepared_sample() -> pd.DataFrame:
                 "Part Name": "Part A",
                 "Installed on": "BOEING 787-8 - ET-ATG",
                 "DUE_DATE": "2024-09-10",
+                "Config slot": "76-11-00-ZA2",
             },
             {
                 "Part Name": "Part B",
                 "Installed on": "BOEING 787-8 - ET-ATG",
                 "DUE_DATE": "2024-08-10",
+                "Config slot": "76-11-00-ZA2",
             },
             {
                 "Part Name": "Part B",
                 "Installed on": "BOEING 787-9 - ET-AUR",
                 "DUE_DATE": "2024-10-10",
+                "Config slot": "32-11-00-ZA7",
             },
         ]
     )
@@ -78,3 +82,9 @@ def test_build_due_time_series_returns_frame_and_summary():
     result = build_due_time_series(prepared, freq="D")
     assert {"period", "due_count", "trend"}.issubset(result.frame.columns)
     assert result.frame["due_count"].sum() == len(prepared.dropna(subset=["due_date"]))
+
+
+def test_build_config_slot_due_scatter_returns_figure():
+    prepared = _prepared_sample()
+    fig = build_config_slot_due_scatter(prepared, top_n=5)
+    assert fig.data is not None

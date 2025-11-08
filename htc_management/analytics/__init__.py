@@ -10,6 +10,7 @@ from .visuals import (
     build_timeline_chart,
     build_due_time_series_chart,
     build_overdue_scatter_chart,
+    build_config_slot_due_scatter,
     create_days_distribution_plot,
 )
 from .profiling import analyze_column_types
@@ -27,4 +28,10 @@ __all__ = [
     "build_aircraft_due_chart",
     "build_part_exposure_chart",
     "build_timeline_chart",
+    "build_due_time_series_chart",
+    "build_overdue_scatter_chart",
+    "build_config_slot_due_scatter",
+    "create_days_distribution_plot",
+    "analyze_column_types",
+    "build_due_time_series",
 ]

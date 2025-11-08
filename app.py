@@ -17,6 +17,7 @@ from htc_management.analytics import (
     build_due_bucket_breakdown,
     analyze_column_types,
     build_due_time_series,
+    build_config_slot_due_scatter,
 )
 from htc_management.analytics.visuals import (
     build_aircraft_due_chart,
@@ -112,6 +113,9 @@ def main() -> None:
 
     st.subheader("Distribution of days until due")
     st.pyplot(create_days_distribution_plot(prepared), clear_figure=True)
+
+    st.subheader("Config slot vs due date")
+    st.plotly_chart(build_config_slot_due_scatter(prepared), use_container_width=True)
 
     st.subheader("Downloads")
     excel_bytes = export_excel_report(prepared, summary)
