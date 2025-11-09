@@ -110,32 +110,46 @@ def _render_summary_table(summary_table: pd.DataFrame, df: pd.DataFrame) -> None
     attachments = _build_summary_attachments(df)
     cohort_labels = [column for column in summary_table.columns if column != "Metric"]
 
-    st.subheader("Summary metrics")
-    header_cols = st.columns(len(cohort_labels) + 2)
-    header_cols[0].markdown("**Metric**")
-    for idx, label in enumerate(cohort_labels, start=1):
-        header_cols[idx].markdown(f"**{label}**")
-    header_cols[-1].markdown("**Attachment**")
+    st.markdown("### Summary metrics")
+    container = st.container()
 
-    for _, row in summary_table.iterrows():
-        row_cols = st.columns(len(cohort_labels) + 2)
-        row_cols[0].markdown(f"**{row['Metric']}**")
-        for idx, label in enumerate(cohort_labels, start=1):
-            row_cols[idx].markdown(str(row[label]))
+    with container:
+        header_html = "".join(
+            f"<th style='padding:8px 12px;text-align:center;background:#f4f6f8;font-weight:600;color:#475467'>{label}</th>"
+            for label in ["Metric", *cohort_labels, "Attachment"]
+        )
+        rows_html = []
+        for _, row in summary_table.iterrows():
+            metric = str(row["Metric"])
+            cells = [f"<td style='padding:10px 12px;text-align:left;font-weight:600;color:#101828'>{metric}</td>"]
+            for label in cohort_labels:
+                cells.append(
+                    f"<td style='padding:10px 12px;text-align:center;color:#344054'>{row[label]}</td>"
+                )
 
-        dataset = attachments.get(row["Metric"])
-        if dataset is not None and not dataset.empty:
-            bytes_payload = _df_to_excel_bytes(dataset, sheet_name=row["Metric"])
-            row_cols[-1].download_button(
-                "Download XLSX",
-                data=bytes_payload,
-                file_name=f"{row['Metric'].lower().replace('≤', 'le').replace(' ', '_')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key=f"summary_attach_{row['Metric']}",
-            )
-        else:
-            row_cols[-1].markdown("—")
+            attachment_cell = "<td style='padding:10px 12px;text-align:center;color:#98a2b3'>—</td>"
+            dataset = attachments.get(metric)
+            if dataset is not None and not dataset.empty:
+                key = metric.lower().replace("≤", "le").replace(" ", "_")
+                bytes_payload = _df_to_excel_bytes(dataset, sheet_name=metric)
+                download_button = st.download_button(
+                    "Download XLSX",
+                    data=bytes_payload,
+                    file_name=f"{key}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"summary_attach_{key}",
+                )
+                attachment_cell = "<td style='padding:10px 12px;text-align:center;'></td>"
+            rows_html.append(f"<tr>{''.join(cells)}{attachment_cell}</tr>")
+
+        table_html = (
+            "<table style='width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden;"
+            "box-shadow:0 10px 40px rgba(15,23,42,0.08);font-size:15px;'>"
+            f"<thead style='background:#f8fafc'>{header_html}</thead>"
+            f"<tbody>{''.join(rows_html)}</tbody>"
+            "</table>"
+        )
+        st.markdown(table_html, unsafe_allow_html=True)
 
 
 def main() -> None:

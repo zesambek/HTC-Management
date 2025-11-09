@@ -14,6 +14,7 @@ class ComponentSummary:
     """Lightweight container for headline analytics."""
 
     total_components: int
+    unique_components: int
     unique_parts: int
     unique_aircraft: int
     overdue_components: int
@@ -28,6 +29,7 @@ def build_summary(df: pd.DataFrame) -> ComponentSummary:
     if df.empty:
         return ComponentSummary(
             total_components=0,
+            unique_components=0,
             unique_parts=0,
             unique_aircraft=0,
             overdue_components=0,
@@ -38,6 +40,16 @@ def build_summary(df: pd.DataFrame) -> ComponentSummary:
         )
 
     total = len(df)
+    unique_components = df.get("serial_number", pd.Series(dtype="string")).nunique(dropna=True)
+    if unique_components == 0:
+        serial_series = _serial_series(df)
+        if serial_series is not None:
+            unique_components = serial_series.astype("string").nunique(dropna=True)
+    serial_series = _serial_series(df)
+    if serial_series is not None:
+        unique_components = serial_series.astype("string").nunique(dropna=True)
+    else:
+        unique_components = df.get("serial_number", pd.Series(dtype="string")).nunique(dropna=True)
     unique_parts = df.get("part_name", pd.Series(dtype="string")).nunique(dropna=True)
     unique_aircraft = df.get("aircraft_registration", pd.Series(dtype="string")).replace("", np.nan).nunique(dropna=True)
 
@@ -56,14 +68,18 @@ def build_summary(df: pd.DataFrame) -> ComponentSummary:
         due_within_90 = int(((days_until_due >= 0) & (days_until_due <= 90)).sum())
 
     serials_with_xxx = 0
-    serial_series = _serial_series(df)
-    if serial_series is not None:
-        serials_with_xxx = int(serial_series.astype("string").str.contains("XXX", case=False, na=False).sum())
+    serial_series_for_flag = _serial_series(df)
+    if serial_series_for_flag is not None:
+        serials_with_xxx = int(
+            serial_series_for_flag.astype("string").str.contains("XXX", case=False, na=False).sum()
+        )
 
     report_date = pd.Timestamp.utcnow().normalize()
 
     return ComponentSummary(
         total_components=int(total),
+        unique_components=int(unique_components),
+        unique_components=int(unique_components),
         unique_parts=int(unique_parts),
         unique_aircraft=int(unique_aircraft),
         overdue_components=overdue_components,
@@ -97,6 +113,14 @@ def summary_to_frame(df: pd.DataFrame, summary: ComponentSummary) -> pd.DataFram
 
     metrics: List[tuple[str, callable]] = [
         ("Total components", lambda frame: len(frame)),
+        (
+            "Unique components",
+            lambda frame: (
+                (_serial_series(frame).astype("string").nunique(dropna=True))
+                if _serial_series(frame) is not None
+                else frame.get("serial_number", pd.Series(dtype="string")).astype("string").nunique(dropna=True)
+            ),
+        ),
         ("Unique parts", lambda frame: frame.get("part_name", pd.Series(dtype="string")).nunique(dropna=True)),
         ("Unique aircraft", lambda frame: frame.get("aircraft_registration", pd.Series(dtype="string")).replace("", np.nan).nunique(dropna=True)),
         ("Serials with XXX", _count_serials_with_xxx),
