@@ -116,7 +116,6 @@ def summary_to_frame(df: pd.DataFrame, summary: ComponentSummary) -> pd.DataFram
             lambda frame: frame.get("is_overdue", pd.Series(False, index=frame.index)).fillna(False).sum(),
         ),
         ("Serials with XXX", _count_serials_with_xxx),
-        ("Serials with XXX", _count_serials_with_xxx),
         ("Due ≤ 30d", lambda frame: ((frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0) & (frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 30)).sum()),
         ("Due ≤ 90d", lambda frame: ((frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0) & (frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 90)).sum()),
     ]
