@@ -40,11 +40,6 @@ def build_summary(df: pd.DataFrame) -> ComponentSummary:
         )
 
     total = len(df)
-    unique_components = df.get("serial_number", pd.Series(dtype="string")).nunique(dropna=True)
-    if unique_components == 0:
-        serial_series = _serial_series(df)
-        if serial_series is not None:
-            unique_components = serial_series.astype("string").nunique(dropna=True)
     serial_series = _serial_series(df)
     if serial_series is not None:
         unique_components = serial_series.astype("string").nunique(dropna=True)
