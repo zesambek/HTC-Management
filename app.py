@@ -61,6 +61,13 @@ SERIAL_COLUMN_CANDIDATES = (
 )
 
 
+def _serial_series(df: pd.DataFrame) -> pd.Series | None:
+    for column in SERIAL_COLUMN_CANDIDATES:
+        if column in df.columns:
+            return df[column]
+    return None
+
+
 def _figure_to_pdf_bytes(fig):
     try:
         return pio.to_image(fig, format="pdf")
@@ -257,8 +264,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-def _serial_series(df: pd.DataFrame) -> pd.Series | None:
-    for column in SERIAL_COLUMN_CANDIDATES:
-        if column in df.columns:
-            return df[column]
-    return None
