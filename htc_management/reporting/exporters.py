@@ -42,7 +42,7 @@ def export_excel_report(
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:  # type: ignore[arg-type]
         prepared_df.to_excel(writer, sheet_name="Components", index=False)
-        summary_to_frame(summary).to_excel(writer, sheet_name="Summary", index=False)
+        summary_to_frame(prepared_df, summary).to_excel(writer, sheet_name="Summary", index=False)
 
         aircraft = build_aircraft_breakdown(prepared_df)
         if not aircraft.empty:
@@ -86,7 +86,7 @@ def build_pdf_report(prepared_df: pd.DataFrame, summary: ComponentSummary) -> by
     styles = getSampleStyleSheet()
     story = [Paragraph("Hard-Time Component Analytics", styles["Title"]), Spacer(1, 12)]
 
-    summary_table = summary_to_frame(summary)
+    summary_table = summary_to_frame(prepared_df, summary)
     story.extend(
         [
             Paragraph("Headline Metrics", styles["Heading2"]),

@@ -3,7 +3,7 @@
 This repository contains a lightweight analytics toolkit that transforms the *HardTimeReport_New (2).xls* workbook into actionable insights. It includes:
 
 - Reusable pandas-based preparation and summarisation helpers (`htc_management.analytics`)
-- A Streamlit dashboard (`app.py`) with interactive charts (dtype profiling, time-series trends, config-slot vs due-date scatter) and download options
+- A Streamlit dashboard (`app.py`) with interactive charts (dtype profiling, time-series trends, config-slot vs due-date scatter) and download options along with a multi-cohort summary table
 - CLI tooling (`cli.py`) for generating Excel/PDF reports
 - Pytest coverage for the core data preparation and summary layers
 

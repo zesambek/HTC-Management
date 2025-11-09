@@ -79,7 +79,7 @@ def main() -> None:
     summary = build_summary(prepared)
 
     st.subheader("Summary metrics")
-    st.dataframe(summary_to_frame(summary), use_container_width=True, hide_index=True)
+    st.dataframe(summary_to_frame(prepared, summary), use_container_width=True, hide_index=True)
 
     st.subheader("Column type overview")
     st.dataframe(analyze_column_types(prepared), use_container_width=True, hide_index=True)

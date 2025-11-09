@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd
@@ -80,25 +80,50 @@ def build_summary(df: pd.DataFrame) -> ComponentSummary:
     )
 
 
-def summary_to_frame(summary: ComponentSummary) -> pd.DataFrame:
-    """Convert summary metrics into a DataFrame for export or display."""
-    metrics = [
-        ("Total components", summary.total_components),
-        ("Unique parts", summary.unique_parts),
-        ("Unique aircraft", summary.unique_aircraft),
-        ("Overdue components", summary.overdue_components),
-        ("Due within 30 days", summary.due_within_30_days),
-        ("Average days until due", summary.average_days_until_due),
-        ("Average days overdue", summary.average_days_overdue),
-        ("Report generated", summary.report_date.strftime("%Y-%m-%d")),
+def summary_to_frame(df: pd.DataFrame, summary: ComponentSummary) -> pd.DataFrame:
+    """
+    Convert summary metrics into a multi-column dataframe covering key cohorts.
+
+    Columns: All, With due date, Overdue, Due ≤ 30d.
+    """
+
+    cohorts: Dict[str, pd.DataFrame] = {
+        "All components": df,
+        "With due date": df.dropna(subset=["due_date"]) if "due_date" in df.columns else df.iloc[0:0],
+        "Overdue": df[df.get("is_overdue", pd.Series(False, index=df.index)).fillna(False)],
+        "Due ≤ 30d": df[
+            (df.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0)
+            & (df.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 30)
+        ],
+    }
+
+    metrics: List[tuple[str, callable]] = [
+        ("Total components", lambda frame: len(frame)),
+        ("Unique parts", lambda frame: frame.get("part_name", pd.Series(dtype="string")).nunique(dropna=True)),
+        ("Unique aircraft", lambda frame: frame.get("aircraft_registration", pd.Series(dtype="string")).replace("", np.nan).nunique(dropna=True)),
+        ("Average days until due", lambda frame: frame.get("days_until_due", pd.Series(dtype="float")).mean()),
+        ("Average days overdue", lambda frame: frame.get("days_overdue", pd.Series(dtype="float")).mean()),
     ]
 
-    return pd.DataFrame(
+    rows: List[Dict[str, object]] = []
+    for label, func in metrics:
+        row = {"Metric": label}
+        for cohort_label, cohort_df in cohorts.items():
+            value = func(cohort_df) if not cohort_df.empty else float("nan")
+            row[cohort_label] = _format_metric_value(value)
+        rows.append(row)
+
+    rows.append(
         {
-            "Metric": [label for label, _ in metrics],
-            "Value": [_format_metric_value(value) for _, value in metrics],
+            "Metric": "Report generated",
+            "All components": summary.report_date.strftime("%Y-%m-%d"),
+            "With due date": "—",
+            "Overdue": "—",
+            "Due ≤ 30d": "—",
         }
     )
+
+    return pd.DataFrame(rows)
 
 
 def _format_metric_value(value: object) -> str:
@@ -106,4 +131,6 @@ def _format_metric_value(value: object) -> str:
         return "—"
     if isinstance(value, float):
         return f"{value:.2f}"
+    if isinstance(value, (int, np.integer)):
+        return f"{int(value):,}"
     return str(value)

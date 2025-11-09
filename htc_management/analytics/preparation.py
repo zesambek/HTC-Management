@@ -117,6 +117,7 @@ def prepare_component_dataframe(df: pd.DataFrame, *, reference_date: pd.Timestam
         working["due_date"] = pd.NaT
     else:
         working["due_date"] = _parse_datetime(working["due_date"])
+        working = working.dropna(subset=["due_date"])
 
     due_delta = (working["due_date"] - reference_date).dt.total_seconds() / 86400.0
     working["days_until_due"] = due_delta

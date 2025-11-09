@@ -50,8 +50,8 @@ def test_build_summary_outputs_expected_metrics():
     assert summary.overdue_components == 1
     assert summary.due_within_30_days == 1
 
-    frame = summary_to_frame(summary)
-    assert {"Metric", "Value"}.issubset(frame.columns)
+    frame = summary_to_frame(prepared, summary)
+    assert {"Metric", "All components"}.issubset(frame.columns)
     assert not frame.empty
 
 
