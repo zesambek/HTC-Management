@@ -8,3 +8,4 @@ reportlab>=3.6; python_version >= "3.8"
 xlrd>=2.0
 statsmodels>=0.14
 kaleido>=0.2.1
+seaborn>=0.13

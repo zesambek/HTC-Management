@@ -9,6 +9,9 @@ import pandas as pd
 import plotly.express as px
 import statsmodels.api as sm
 from matplotlib import pyplot as plt
+import seaborn as sns
+
+sns.set_theme(style="whitegrid")
 
 
 def _empty_figure(message: str):
