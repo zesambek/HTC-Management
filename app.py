@@ -5,6 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 import base64
+from html import escape
 
 import pandas as pd
 import plotly.io as pio
