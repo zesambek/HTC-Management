@@ -119,6 +119,20 @@ def prepare_component_dataframe(df: pd.DataFrame, *, reference_date: pd.Timestam
         working["due_date"] = _parse_datetime(working["due_date"])
         working = working.dropna(subset=["due_date"])
 
+    # Ensure we keep only one row per physical component (earliest due date)
+    dedupe_keys: list[str] = []
+    if "oem_part_number" in working.columns:
+        dedupe_keys = ["oem_part_number"]
+    elif "serial_number" in working.columns:
+        dedupe_keys = ["serial_number"]
+
+    if dedupe_keys:
+        working = (
+            working.sort_values("due_date")
+            .drop_duplicates(subset=dedupe_keys, keep="first")
+            .reset_index(drop=True)
+        )
+
     due_delta = (working["due_date"] - reference_date).dt.total_seconds() / 86400.0
     working["days_until_due"] = due_delta
     working["is_overdue"] = due_delta < 0
