@@ -52,6 +52,15 @@ def _download_bytes(data: bytes, *, file_name: str, mime: str, label: str, key: 
     )
 
 
+SERIAL_COLUMN_CANDIDATES = (
+    "serial_number",
+    "Serial Number",
+    "serial no / batch no",
+    "Serial No / Batch No",
+    "Serial",
+)
+
+
 def _figure_to_pdf_bytes(fig):
     try:
         return pio.to_image(fig, format="pdf")
@@ -80,9 +89,7 @@ def _build_summary_attachments(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         if not due_90.empty:
             attachments["Due ≤ 90d"] = due_90
 
-    serial_series = df.get("serial_number")
-    if serial_series is None:
-        serial_series = df.get("Serial No / Batch No")
+    serial_series = _serial_series(df)
     if serial_series is not None:
         mask = serial_series.astype("string").str.contains("XXX", case=False, na=False)
         serial_subset = df[mask]
@@ -250,3 +257,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+def _serial_series(df: pd.DataFrame) -> pd.Series | None:
+    for column in SERIAL_COLUMN_CANDIDATES:
+        if column in df.columns:
+            return df[column]
+    return None

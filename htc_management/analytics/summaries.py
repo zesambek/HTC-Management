@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Sequence
 
 import numpy as np
 import pandas as pd
@@ -56,7 +56,7 @@ def build_summary(df: pd.DataFrame) -> ComponentSummary:
         due_within_90 = int(((days_until_due >= 0) & (days_until_due <= 90)).sum())
 
     serials_with_xxx = 0
-    serial_series = df.get("serial_number") or df.get("serial no / batch no")
+    serial_series = _serial_series(df)
     if serial_series is not None:
         serials_with_xxx = int(serial_series.astype("string").str.contains("XXX", case=False, na=False).sum())
 
@@ -99,20 +99,7 @@ def summary_to_frame(df: pd.DataFrame, summary: ComponentSummary) -> pd.DataFram
         ("Total components", lambda frame: len(frame)),
         ("Unique parts", lambda frame: frame.get("part_name", pd.Series(dtype="string")).nunique(dropna=True)),
         ("Unique aircraft", lambda frame: frame.get("aircraft_registration", pd.Series(dtype="string")).replace("", np.nan).nunique(dropna=True)),
-        (
-            "Serials with XXX",
-            lambda frame: (
-                (
-                    frame.get("serial_number")
-                    if frame.get("serial_number") is not None
-                    else frame.get("Serial No / Batch No")
-                )
-                or pd.Series(dtype="string")
-            )
-            .astype("string")
-            .str.contains("XXX", case=False, na=False)
-            .sum(),
-        ),
+        ("Serials with XXX", _count_serials_with_xxx),
         ("Due ≤ 30d", lambda frame: ((frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0) & (frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 30)).sum()),
         ("Due ≤ 90d", lambda frame: ((frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0) & (frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 90)).sum()),
     ]
@@ -147,3 +134,26 @@ def _format_metric_value(value: object) -> str:
     if isinstance(value, (int, np.integer)):
         return f"{int(value):,}"
     return str(value)
+
+
+SERIAL_COLUMN_CANDIDATES: Sequence[str] = (
+    "serial_number",
+    "Serial Number",
+    "serial no / batch no",
+    "Serial No / Batch No",
+    "Serial",
+)
+
+
+def _serial_series(df: pd.DataFrame) -> pd.Series | None:
+    for column in SERIAL_COLUMN_CANDIDATES:
+        if column in df.columns:
+            return df[column]
+    return None
+
+
+def _count_serials_with_xxx(frame: pd.DataFrame) -> int:
+    series = _serial_series(frame)
+    if series is None or series.empty:
+        return 0
+    return int(series.astype("string").str.contains("XXX", case=False, na=False).sum())
