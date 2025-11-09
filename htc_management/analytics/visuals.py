@@ -12,6 +12,10 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 
 sns.set_theme(style="whitegrid")
+_BLUE = "#2563eb"
+_RED = "#dc2626"
+_GREEN = "#059669"
+_PALETTE = [_RED, "#0284c7", "#22c55e", "#f59e0b", "#6366f1"]
 
 
 def _empty_figure(message: str):
@@ -232,4 +236,115 @@ def build_config_slot_due_scatter(df: pd.DataFrame, *, top_n: int = 20):
         yaxis={"categoryorder": "total ascending"},
         xaxis=dict(zeroline=True, zerolinecolor="#777", zerolinewidth=1),
     )
+    return fig
+
+
+def build_aircraft_exposure_matplot(df: pd.DataFrame):
+    """Seaborn bar chart for component exposure by aircraft."""
+    if df.empty or "aircraft_registration" not in df.columns:
+        fig, ax = plt.subplots(figsize=(6, 3))
+        ax.text(0.5, 0.5, "No aircraft exposure data", ha="center", va="center")
+        ax.axis("off")
+        return fig
+
+    working = df.copy()
+    working["status"] = np.where(working.get("is_overdue", False), "Overdue", "Current")
+    exposure = (
+        working.groupby(["aircraft_registration", "status"])
+        .size()
+        .reset_index(name="components")
+    )
+
+    fig, ax = plt.subplots(figsize=(9, 4))
+    sns.barplot(
+        data=exposure,
+        x="aircraft_registration",
+        y="components",
+        hue="status",
+        palette=[_RED, _BLUE],
+        ax=ax,
+    )
+    ax.set_xlabel("Aircraft")
+    ax.set_ylabel("Component count")
+    ax.set_title("Component exposure by aircraft")
+    ax.tick_params(axis="x", rotation=45)
+    fig.tight_layout()
+    return fig
+
+
+def build_due_status_donut(df: pd.DataFrame):
+    """Matplotlib donut for due-bucket split."""
+    if df.empty or "due_bucket" not in df.columns:
+        fig, ax = plt.subplots(figsize=(4, 4))
+        ax.text(0.5, 0.5, "Due bucket data unavailable", ha="center", va="center")
+        ax.axis("off")
+        return fig
+
+    counts = df["due_bucket"].value_counts()
+    fig, ax = plt.subplots(figsize=(4, 4))
+    wedges, texts = ax.pie(
+        counts.values,
+        labels=[f"{label} ({value/counts.sum():.1%})" for label, value in counts.items()],
+        colors=sns.color_palette("Blues", len(counts)),
+        startangle=90,
+        wedgeprops=dict(width=0.45),
+    )
+    ax.set_title("Due status distribution")
+    return fig
+
+
+def build_top_components_matplot(df: pd.DataFrame, *, top_n: int = 10):
+    """Horizontal bar chart for most common components."""
+    if df.empty or "part_name" not in df.columns:
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.text(0.5, 0.5, "Component data unavailable", ha="center", va="center")
+        ax.axis("off")
+        return fig
+
+    counts = (
+        df.value_counts("part_name")
+        .reset_index(name="components")
+        .head(top_n)
+        .sort_values("components", ascending=True)
+    )
+    fig, ax = plt.subplots(figsize=(6, 4))
+    sns.barplot(data=counts, x="components", y="part_name", palette="crest", ax=ax)
+    ax.set_xlabel("Components")
+    ax.set_ylabel("")
+    ax.set_title(f"Top {top_n} components by count")
+    fig.tight_layout()
+    return fig
+
+
+def build_due_timeline_matplot(df: pd.DataFrame):
+    """Matplotlib line chart with rolling average for due-date timeline."""
+    if df.empty or "due_date" not in df.columns:
+        fig, ax = plt.subplots(figsize=(6, 3))
+        ax.text(0.5, 0.5, "Due timeline unavailable", ha="center", va="center")
+        ax.axis("off")
+        return fig
+
+    timeline = (
+        df.dropna(subset=["due_date"])
+        .assign(period=lambda frame: frame["due_date"].dt.to_period("W").dt.to_timestamp())
+        .groupby("period")
+        .size()
+        .rename("components")
+        .reset_index()
+    )
+    if timeline.empty:
+        fig, ax = plt.subplots(figsize=(6, 3))
+        ax.text(0.5, 0.5, "Due timeline unavailable", ha="center", va="center")
+        ax.axis("off")
+        return fig
+
+    timeline["rolling"] = timeline["components"].rolling(4, min_periods=1).mean()
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    ax.plot(timeline["period"], timeline["components"], color=_BLUE, alpha=0.4, label="Weekly")
+    ax.plot(timeline["period"], timeline["rolling"], color=_GREEN, linewidth=2, label="4-week avg")
+    ax.set_title("Upcoming due timeline")
+    ax.set_xlabel("Due date (weekly)")
+    ax.set_ylabel("Components due")
+    ax.legend()
+    fig.tight_layout()
     return fig

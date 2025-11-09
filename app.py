@@ -22,12 +22,12 @@ from htc_management.analytics import (
     build_due_time_series,
     build_config_slot_due_scatter,
     build_config_slot_due_table,
+    build_aircraft_exposure_matplot,
+    build_due_status_donut,
+    build_top_components_matplot,
+    build_due_timeline_matplot,
 )
 from htc_management.analytics.visuals import (
-    build_aircraft_due_chart,
-    build_due_bucket_chart,
-    build_part_exposure_chart,
-    build_timeline_chart,
     build_due_time_series_chart,
     build_overdue_scatter_chart,
     create_days_distribution_plot,
@@ -272,15 +272,15 @@ def main() -> None:
 
     col1, col2 = st.columns(2)
     with col1:
-        st.plotly_chart(build_aircraft_due_chart(prepared), use_container_width=True)
+        st.pyplot(build_aircraft_exposure_matplot(prepared), clear_figure=True)
     with col2:
-        st.plotly_chart(build_due_bucket_chart(prepared), use_container_width=True)
+        st.pyplot(build_due_status_donut(prepared), clear_figure=True)
 
     col3, col4 = st.columns(2)
     with col3:
-        st.plotly_chart(build_part_exposure_chart(prepared), use_container_width=True)
+        st.pyplot(build_top_components_matplot(prepared), clear_figure=True)
     with col4:
-        st.plotly_chart(build_timeline_chart(prepared), use_container_width=True)
+        st.pyplot(build_due_timeline_matplot(prepared), clear_figure=True)
 
     st.subheader("Tabular breakdowns")
     tabs = st.tabs(["Aircraft", "Components", "Due buckets"])
