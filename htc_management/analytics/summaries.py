@@ -79,7 +79,6 @@ def build_summary(df: pd.DataFrame) -> ComponentSummary:
     return ComponentSummary(
         total_components=int(total),
         unique_components=int(unique_components),
-        unique_components=int(unique_components),
         unique_parts=int(unique_parts),
         unique_aircraft=int(unique_aircraft),
         overdue_components=overdue_components,
