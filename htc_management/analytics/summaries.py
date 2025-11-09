@@ -18,25 +18,24 @@ class ComponentSummary:
     unique_aircraft: int
     overdue_components: int
     due_within_30_days: int
-    average_days_until_due: float
-    average_days_overdue: float
+    due_within_90_days: int
+    serials_with_xxx: int
     report_date: pd.Timestamp
 
 
 def build_summary(df: pd.DataFrame) -> ComponentSummary:
     """Generate headline KPIs from the prepared component dataframe."""
     if df.empty:
-        zero = ComponentSummary(
+        return ComponentSummary(
             total_components=0,
             unique_parts=0,
             unique_aircraft=0,
             overdue_components=0,
             due_within_30_days=0,
-            average_days_until_due=float("nan"),
-            average_days_overdue=float("nan"),
+            due_within_90_days=0,
+            serials_with_xxx=0,
             report_date=pd.Timestamp.utcnow().normalize(),
         )
-        return zero
 
     total = len(df)
     unique_parts = df.get("part_name", pd.Series(dtype="string")).nunique(dropna=True)
@@ -52,19 +51,14 @@ def build_summary(df: pd.DataFrame) -> ComponentSummary:
     if not days_until_due.empty:
         due_within_30 = int(((days_until_due >= 0) & (days_until_due <= 30)).sum())
 
-    avg_until_due = float(days_until_due.mean()) if not days_until_due.empty else float("nan")
-    if not np.isnan(avg_until_due):
-        avg_until_due = round(avg_until_due, 2)
+    due_within_90 = 0
+    if not days_until_due.empty:
+        due_within_90 = int(((days_until_due >= 0) & (days_until_due <= 90)).sum())
 
-    if not days_overdue.empty and overdue_components:
-        avg_overdue = float(days_overdue[overdue_mask].mean())
-    elif not days_overdue.empty:
-        avg_overdue = float(days_overdue.mean())
-    else:
-        avg_overdue = float("nan")
-
-    if not np.isnan(avg_overdue):
-        avg_overdue = round(avg_overdue, 2)
+    serials_with_xxx = 0
+    serial_series = df.get("serial_number") or df.get("serial no / batch no")
+    if serial_series is not None:
+        serials_with_xxx = int(serial_series.astype("string").str.contains("XXX", case=False, na=False).sum())
 
     report_date = pd.Timestamp.utcnow().normalize()
 
@@ -74,8 +68,8 @@ def build_summary(df: pd.DataFrame) -> ComponentSummary:
         unique_aircraft=int(unique_aircraft),
         overdue_components=overdue_components,
         due_within_30_days=due_within_30,
-        average_days_until_due=avg_until_due,
-        average_days_overdue=avg_overdue,
+        due_within_90_days=due_within_90,
+        serials_with_xxx=serials_with_xxx,
         report_date=report_date,
     )
 
@@ -95,14 +89,32 @@ def summary_to_frame(df: pd.DataFrame, summary: ComponentSummary) -> pd.DataFram
             (df.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0)
             & (df.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 30)
         ],
+        "Due ≤ 90d": df[
+            (df.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0)
+            & (df.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 90)
+        ],
     }
 
     metrics: List[tuple[str, callable]] = [
         ("Total components", lambda frame: len(frame)),
         ("Unique parts", lambda frame: frame.get("part_name", pd.Series(dtype="string")).nunique(dropna=True)),
         ("Unique aircraft", lambda frame: frame.get("aircraft_registration", pd.Series(dtype="string")).replace("", np.nan).nunique(dropna=True)),
-        ("Average days until due", lambda frame: frame.get("days_until_due", pd.Series(dtype="float")).mean()),
-        ("Average days overdue", lambda frame: frame.get("days_overdue", pd.Series(dtype="float")).mean()),
+        (
+            "Serials with XXX",
+            lambda frame: (
+                (
+                    frame.get("serial_number")
+                    if frame.get("serial_number") is not None
+                    else frame.get("Serial No / Batch No")
+                )
+                or pd.Series(dtype="string")
+            )
+            .astype("string")
+            .str.contains("XXX", case=False, na=False)
+            .sum(),
+        ),
+        ("Due ≤ 30d", lambda frame: ((frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0) & (frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 30)).sum()),
+        ("Due ≤ 90d", lambda frame: ((frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0) & (frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 90)).sum()),
     ]
 
     rows: List[Dict[str, object]] = []
@@ -120,6 +132,7 @@ def summary_to_frame(df: pd.DataFrame, summary: ComponentSummary) -> pd.DataFram
             "With due date": "—",
             "Overdue": "—",
             "Due ≤ 30d": "—",
+            "Due ≤ 90d": "—",
         }
     )
 

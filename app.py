@@ -30,7 +30,7 @@ from htc_management.analytics.visuals import (
     build_overdue_scatter_chart,
     create_days_distribution_plot,
 )
-from htc_management.reporting import export_excel_report, build_pdf_report
+from htc_management.reporting import export_excel_report, build_pdf_report, build_summary_pdf
 
 st.set_page_config(page_title="Hard-Time Component Analytics", layout="wide")
 st.title("🛠️ Hard-Time Component Analytics")
@@ -60,6 +60,70 @@ def _figure_to_pdf_bytes(fig):
         return None
 
 
+def _df_to_excel_bytes(df: pd.DataFrame, *, sheet_name: str = "Filtered") -> bytes:
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:  # type: ignore[arg-type]
+        df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def _build_summary_attachments(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    attachments: dict[str, pd.DataFrame] = {}
+
+    days = pd.to_numeric(df.get("days_until_due"), errors="coerce")
+    if days is not None and not days.empty:
+        due_30 = df[(days >= 0) & (days <= 30)]
+        if not due_30.empty:
+            attachments["Due ≤ 30d"] = due_30
+        due_90 = df[(days >= 0) & (days <= 90)]
+        if not due_90.empty:
+            attachments["Due ≤ 90d"] = due_90
+
+    serial_series = df.get("serial_number")
+    if serial_series is None:
+        serial_series = df.get("Serial No / Batch No")
+    if serial_series is not None:
+        mask = serial_series.astype("string").str.contains("XXX", case=False, na=False)
+        serial_subset = df[mask]
+        if not serial_subset.empty:
+            attachments["Serials with XXX"] = serial_subset
+
+    return attachments
+
+
+def _render_summary_table(summary_table: pd.DataFrame, df: pd.DataFrame) -> None:
+    attachments = _build_summary_attachments(df)
+    cohort_labels = [column for column in summary_table.columns if column != "Metric"]
+
+    st.subheader("Summary metrics")
+    header_cols = st.columns(len(cohort_labels) + 2)
+    header_cols[0].markdown("**Metric**")
+    for idx, label in enumerate(cohort_labels, start=1):
+        header_cols[idx].markdown(f"**{label}**")
+    header_cols[-1].markdown("**Attachment**")
+
+    for _, row in summary_table.iterrows():
+        row_cols = st.columns(len(cohort_labels) + 2)
+        row_cols[0].markdown(f"**{row['Metric']}**")
+        for idx, label in enumerate(cohort_labels, start=1):
+            row_cols[idx].markdown(str(row[label]))
+
+        dataset = attachments.get(row["Metric"])
+        if dataset is not None and not dataset.empty:
+            bytes_payload = _df_to_excel_bytes(dataset, sheet_name=row["Metric"])
+            row_cols[-1].download_button(
+                "Download XLSX",
+                data=bytes_payload,
+                file_name=f"{row['Metric'].lower().replace('≤', 'le').replace(' ', '_')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key=f"summary_attach_{row['Metric']}",
+            )
+        else:
+            row_cols[-1].markdown("—")
+
+
 def main() -> None:
     with st.sidebar:
         st.header("Data source")
@@ -78,8 +142,20 @@ def main() -> None:
     prepared = prepare_component_dataframe(data)
     summary = build_summary(prepared)
 
-    st.subheader("Summary metrics")
-    st.dataframe(summary_to_frame(prepared, summary), use_container_width=True, hide_index=True)
+    summary_table = summary_to_frame(prepared, summary)
+    _render_summary_table(summary_table, prepared)
+    try:
+        summary_pdf = build_summary_pdf(summary_table)
+    except ImportError as exc:
+        st.warning(str(exc))
+    else:
+        _download_bytes(
+            summary_pdf,
+            file_name="summary_metrics.pdf",
+            mime="application/pdf",
+            label="Download PDF summary",
+            key="summary_pdf_dl",
+        )
 
     st.subheader("Column type overview")
     st.dataframe(analyze_column_types(prepared), use_container_width=True, hide_index=True)

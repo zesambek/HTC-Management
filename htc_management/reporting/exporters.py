@@ -132,3 +132,28 @@ def _table(df: pd.DataFrame) -> Table:
         )
     )
     return tbl
+
+
+def build_summary_pdf(summary_table: pd.DataFrame) -> bytes:
+    """Generate a compact PDF containing only the summary metrics table."""
+    if not _REPORTLAB_AVAILABLE:  # pragma: no cover - optional dependency
+        raise ImportError("ReportLab is required for PDF export. Install it via `pip install reportlab`.")
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=42,
+        bottomMargin=36,
+    )
+    styles = getSampleStyleSheet()
+    story = [
+        Paragraph("Summary Metrics", styles["Title"]),
+        Spacer(1, 12),
+        _table(summary_table),
+    ]
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
