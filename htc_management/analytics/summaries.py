@@ -97,15 +97,6 @@ def summary_to_frame(df: pd.DataFrame, summary: ComponentSummary) -> pd.DataFram
 
     cohorts: Dict[str, pd.DataFrame] = {
         "All components": df,
-        "Overdue": df[df.get("is_overdue", pd.Series(False, index=df.index)).fillna(False)],
-        "Due ≤ 30d": df[
-            (df.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0)
-            & (df.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 30)
-        ],
-        "Due ≤ 90d": df[
-            (df.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0)
-            & (df.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 90)
-        ],
     }
 
     metrics: List[tuple[str, callable]] = [
@@ -125,6 +116,7 @@ def summary_to_frame(df: pd.DataFrame, summary: ComponentSummary) -> pd.DataFram
             lambda frame: frame.get("is_overdue", pd.Series(False, index=frame.index)).fillna(False).sum(),
         ),
         ("Serials with XXX", _count_serials_with_xxx),
+        ("Serials with XXX", _count_serials_with_xxx),
         ("Due ≤ 30d", lambda frame: ((frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0) & (frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 30)).sum()),
         ("Due ≤ 90d", lambda frame: ((frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0) & (frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 90)).sum()),
     ]
@@ -132,18 +124,14 @@ def summary_to_frame(df: pd.DataFrame, summary: ComponentSummary) -> pd.DataFram
     rows: List[Dict[str, object]] = []
     for label, func in metrics:
         row = {"Metric": label}
-        for cohort_label, cohort_df in cohorts.items():
-            value = func(cohort_df) if not cohort_df.empty else float("nan")
-            row[cohort_label] = _format_metric_value(value)
+        value = func(df)
+        row["All components"] = _format_metric_value(value)
         rows.append(row)
 
     rows.append(
         {
             "Metric": "Report generated",
             "All components": summary.report_date.strftime("%Y-%m-%d"),
-            "Overdue": "—",
-            "Due ≤ 30d": "—",
-            "Due ≤ 90d": "—",
         }
     )
 

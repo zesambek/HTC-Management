@@ -89,25 +89,46 @@ def _df_to_excel_bytes(df: pd.DataFrame, *, sheet_name: str = "Filtered") -> byt
 def _build_summary_attachments(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     attachments: dict[str, pd.DataFrame] = {}
 
+    def _register(name: str, frame: pd.DataFrame) -> None:
+        if frame is not None and not frame.empty:
+            attachments[name] = frame
+
     days = pd.to_numeric(df.get("days_until_due"), errors="coerce")
     if days is not None and not days.empty:
-        due_30 = df[(days >= 0) & (days <= 30)]
-        if not due_30.empty:
-            attachments["Due ≤ 30d"] = due_30
-        due_90 = df[(days >= 0) & (days <= 90)]
-        if not due_90.empty:
-            attachments["Due ≤ 90d"] = due_90
+        _register("Due ≤ 30d", df[(days >= 0) & (days <= 30)])
+        _register("Due ≤ 90d", df[(days >= 0) & (days <= 90)])
 
     serial_series = _serial_series(df)
     if serial_series is not None:
-        mask = serial_series.astype("string").str.contains("XXX", case=False, na=False)
-        serial_subset = df[mask]
-        if not serial_subset.empty:
-            attachments["Serials with XXX"] = serial_subset
+        serial_subset = df[serial_series.astype("string").str.contains("XXX", case=False, na=False)]
+        _register("Serials with XXX", serial_subset)
 
     overdue_subset = df[df.get("is_overdue", pd.Series(False, index=df.index)).fillna(False)]
-    if not overdue_subset.empty:
-        attachments["Overdue components"] = overdue_subset
+    _register("Overdue components", overdue_subset)
+
+    if "oem_part_number" in df.columns:
+        unique_components = (
+            df[df["oem_part_number"].notna()]
+            .sort_values("due_date")
+            .drop_duplicates(subset=["oem_part_number"], keep="first")
+        )
+        _register("Unique components", unique_components)
+
+    if "part_name" in df.columns:
+        unique_parts = (
+            df[df["part_name"].notna()]
+            .sort_values("due_date")
+            .drop_duplicates(subset=["part_name"], keep="first")
+        )
+        _register("Unique parts", unique_parts)
+
+    if "aircraft_registration" in df.columns:
+        unique_aircraft = (
+            df[df["aircraft_registration"].notna()]
+            .sort_values("due_date")
+            .drop_duplicates(subset=["aircraft_registration"], keep="first")
+        )
+        _register("Unique aircraft", unique_aircraft)
 
     return attachments
 
