@@ -40,11 +40,15 @@ def build_summary(df: pd.DataFrame) -> ComponentSummary:
         )
 
     total = len(df)
-    serial_series = _serial_series(df)
-    if serial_series is not None:
-        unique_components = serial_series.astype("string").nunique(dropna=True)
+    part_series = df.get("oem_part_number")
+    if part_series is not None and not part_series.dropna().empty:
+        unique_components = part_series.astype("string").nunique(dropna=True)
     else:
-        unique_components = df.get("serial_number", pd.Series(dtype="string")).nunique(dropna=True)
+        serial_series = _serial_series(df)
+        if serial_series is not None:
+            unique_components = serial_series.astype("string").nunique(dropna=True)
+        else:
+            unique_components = df.get("serial_number", pd.Series(dtype="string")).astype("string").nunique(dropna=True)
     unique_parts = df.get("part_name", pd.Series(dtype="string")).nunique(dropna=True)
     unique_aircraft = df.get("aircraft_registration", pd.Series(dtype="string")).replace("", np.nan).nunique(dropna=True)
 
@@ -93,7 +97,6 @@ def summary_to_frame(df: pd.DataFrame, summary: ComponentSummary) -> pd.DataFram
 
     cohorts: Dict[str, pd.DataFrame] = {
         "All components": df,
-        "With due date": df.dropna(subset=["due_date"]) if "due_date" in df.columns else df.iloc[0:0],
         "Overdue": df[df.get("is_overdue", pd.Series(False, index=df.index)).fillna(False)],
         "Due ≤ 30d": df[
             (df.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0)
@@ -117,6 +120,10 @@ def summary_to_frame(df: pd.DataFrame, summary: ComponentSummary) -> pd.DataFram
         ),
         ("Unique parts", lambda frame: frame.get("part_name", pd.Series(dtype="string")).nunique(dropna=True)),
         ("Unique aircraft", lambda frame: frame.get("aircraft_registration", pd.Series(dtype="string")).replace("", np.nan).nunique(dropna=True)),
+        (
+            "Overdue components",
+            lambda frame: frame.get("is_overdue", pd.Series(False, index=frame.index)).fillna(False).sum(),
+        ),
         ("Serials with XXX", _count_serials_with_xxx),
         ("Due ≤ 30d", lambda frame: ((frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0) & (frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 30)).sum()),
         ("Due ≤ 90d", lambda frame: ((frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) >= 0) & (frame.get("days_until_due", pd.Series(dtype="float")).fillna(np.inf) <= 90)).sum()),
@@ -134,7 +141,6 @@ def summary_to_frame(df: pd.DataFrame, summary: ComponentSummary) -> pd.DataFram
         {
             "Metric": "Report generated",
             "All components": summary.report_date.strftime("%Y-%m-%d"),
-            "With due date": "—",
             "Overdue": "—",
             "Due ≤ 30d": "—",
             "Due ≤ 90d": "—",

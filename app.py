@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+import base64
 
 import pandas as pd
 import plotly.io as pio
@@ -103,53 +104,112 @@ def _build_summary_attachments(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         if not serial_subset.empty:
             attachments["Serials with XXX"] = serial_subset
 
+    overdue_subset = df[df.get("is_overdue", pd.Series(False, index=df.index)).fillna(False)]
+    if not overdue_subset.empty:
+        attachments["Overdue components"] = overdue_subset
+
     return attachments
 
 
 def _render_summary_table(summary_table: pd.DataFrame, df: pd.DataFrame) -> None:
     attachments = _build_summary_attachments(df)
-    cohort_labels = [column for column in summary_table.columns if column != "Metric"]
+    preferred_order = ["All components", "Overdue", "Due ≤ 30d", "Due ≤ 90d"]
+    cohort_labels = [label for label in preferred_order if label in summary_table.columns]
 
     st.markdown("### Summary metrics")
-    container = st.container()
 
-    with container:
-        header_html = "".join(
-            f"<th style='padding:8px 12px;text-align:center;background:#f4f6f8;font-weight:600;color:#475467'>{label}</th>"
-            for label in ["Metric", *cohort_labels, "Attachment"]
-        )
-        rows_html = []
-        for _, row in summary_table.iterrows():
-            metric = str(row["Metric"])
-            cells = [f"<td style='padding:10px 12px;text-align:left;font-weight:600;color:#101828'>{metric}</td>"]
-            for label in cohort_labels:
-                cells.append(
-                    f"<td style='padding:10px 12px;text-align:center;color:#344054'>{row[label]}</td>"
-                )
+    table_style = """
+    <style>
+    .summary-table-wrapper {
+        border-radius: 18px;
+        background: #ffffff;
+        padding: 8px;
+        box-shadow: 0 35px 80px rgba(15, 23, 42, 0.08);
+        margin-bottom: 1rem;
+    }
+    .summary-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 15px;
+        color: #101828;
+    }
+    .summary-table thead {
+        background: #f5f7fb;
+        text-transform: uppercase;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        color: #475467;
+    }
+    .summary-table th,
+    .summary-table td {
+        padding: 14px 18px;
+        text-align: center;
+        border-bottom: 1px solid #edf0f5;
+    }
+    .summary-table tbody tr:nth-child(odd) {
+        background: #fcfdff;
+    }
+    .summary-table tbody tr:hover {
+        background: #eff4ff;
+    }
+    .summary-metric {
+        text-align: left !important;
+        font-weight: 600;
+        color: #0f1729;
+    }
+    .summary-attachment a {
+        display: inline-block;
+        padding: 6px 16px;
+        border-radius: 999px;
+        background: #175cd3;
+        color: #fff;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 13px;
+        box-shadow: 0 10px 20px rgba(23, 92, 211, 0.35);
+    }
+    .summary-attachment span {
+        color: #98a2b3;
+    }
+    </style>
+    """
+    st.markdown(table_style, unsafe_allow_html=True)
 
-            attachment_cell = "<td style='padding:10px 12px;text-align:center;color:#98a2b3'>—</td>"
-            dataset = attachments.get(metric)
-            if dataset is not None and not dataset.empty:
-                key = metric.lower().replace("≤", "le").replace(" ", "_")
-                bytes_payload = _df_to_excel_bytes(dataset, sheet_name=metric)
-                download_button = st.download_button(
-                    "Download XLSX",
-                    data=bytes_payload,
-                    file_name=f"{key}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key=f"summary_attach_{key}",
-                )
-                attachment_cell = "<td style='padding:10px 12px;text-align:center;'></td>"
-            rows_html.append(f"<tr>{''.join(cells)}{attachment_cell}</tr>")
+    header_cells = "".join(
+        f"<th>{escape(label)}</th>" for label in ["Metric", *cohort_labels, "Attachment"]
+    )
+    rows_html: list[str] = []
+    for _, row in summary_table.iterrows():
+        metric = str(row["Metric"])
+        cells = [f"<td class='summary-metric'>{escape(metric)}</td>"]
+        for label in cohort_labels:
+            cells.append(f"<td>{escape(str(row[label]))}</td>")
 
-        table_html = (
-            "<table style='width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden;"
-            "box-shadow:0 10px 40px rgba(15,23,42,0.08);font-size:15px;'>"
-            f"<thead style='background:#f8fafc'>{header_html}</thead>"
-            f"<tbody>{''.join(rows_html)}</tbody>"
-            "</table>"
-        )
-        st.markdown(table_html, unsafe_allow_html=True)
+        dataset = attachments.get(metric)
+        if dataset is not None and not dataset.empty:
+            bytes_payload = _df_to_excel_bytes(dataset, sheet_name=metric)
+            b64 = base64.b64encode(bytes_payload).decode()
+            filename = metric.lower().replace("≤", "le").replace(" ", "_") + ".xlsx"
+            attachment_cell = (
+                "<td class='summary-attachment'>"
+                f"<a download='{escape(filename)}' "
+                f"href='data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}'>"
+                "Download XLSX</a></td>"
+            )
+        else:
+            attachment_cell = "<td class='summary-attachment'><span>—</span></td>"
+
+        rows_html.append(f"<tr>{''.join(cells)}{attachment_cell}</tr>")
+
+    table_html = (
+        "<div class='summary-table-wrapper'>"
+        "<table class='summary-table'>"
+        f"<thead><tr>{header_cells}</tr></thead>"
+        f"<tbody>{''.join(rows_html)}</tbody>"
+        "</table>"
+        "</div>"
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
 
 
 def main() -> None:
