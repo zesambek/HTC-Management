@@ -350,40 +350,61 @@ def build_due_timeline_matplot(df: pd.DataFrame):
     return fig
 
 
-def build_part_aircraft_heatmap(df: pd.DataFrame, *, top_parts: int = 15, top_aircraft: int = 15):
-    """Heatmap showing how unique parts distribute across aircraft registrations."""
-    if df.empty or {"part_name", "aircraft_registration"} - set(df.columns):
+def build_part_aircraft_heatmap(df: pd.DataFrame) -> Tuple[plt.Figure, list[plt.Figure]]:
+    """
+    Generate stacked heatmaps showing unique part exposure per aircraft segmented by due windows.
+
+    Returns a tuple of (overall figure, [overdue_fig, due_30_fig, due_90_fig, gt_90_fig]).
+    """
+
+    required = {"part_name", "aircraft_registration", "days_until_due"}
+    if df.empty or required - set(df.columns):
         fig, ax = plt.subplots(figsize=(4, 3))
         ax.text(0.5, 0.5, "Heatmap unavailable", ha="center", va="center")
         ax.axis("off")
+        return fig, []
+
+    working = df.copy()
+    working["due_bucket"] = pd.cut(
+        working["days_until_due"],
+        bins=[-np.inf, 0, 30, 90, np.inf],
+        labels=["Overdue", "Due ≤ 30d", "Due ≤ 90d", "Due > 90d"],
+    )
+
+    def _heatmap(frame: pd.DataFrame, title: str) -> plt.Figure:
+        pivot = (
+            frame.groupby(["part_name", "aircraft_registration"])
+            .size()
+            .unstack(fill_value=0)
+        )
+        if pivot.empty:
+            fig, ax = plt.subplots(figsize=(4, 3))
+            ax.text(0.5, 0.5, f"{title} unavailable", ha="center", va="center")
+            ax.axis("off")
+            return fig
+
+        pivot = pivot.sort_values(pivot.sum(axis=1), ascending=False)
+        pivot = pivot.head(25)
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        sns.heatmap(
+            pivot,
+            cmap="mako",
+            linewidths=0.3,
+            linecolor="#ffffff",
+            cbar_kws={"label": "Component count"},
+            ax=ax,
+        )
+        ax.set_xlabel("Aircraft registration")
+        ax.set_ylabel("Part name")
+        ax.set_title(title)
+        fig.tight_layout()
         return fig
 
-    pivot = (
-        df.groupby(["part_name", "aircraft_registration"])
-        .size()
-        .unstack(fill_value=0)
-    )
-    if pivot.empty:
-        fig, ax = plt.subplots(figsize=(4, 3))
-        ax.text(0.5, 0.5, "Heatmap unavailable", ha="center", va="center")
-        ax.axis("off")
-        return fig
+    overall_fig = _heatmap(working, "Part vs Aircraft exposure (all components)")
+    detail_figs = []
+    for label in ["Overdue", "Due ≤ 30d", "Due ≤ 90d", "Due > 90d"]:
+        subset = working[working["due_bucket"] == label]
+        detail_figs.append(_heatmap(subset, f"{label} exposure"))
 
-    pivot = pivot.sort_values(pivot.columns.tolist(), ascending=False)
-    pivot = pivot.head(top_parts)
-    pivot = pivot[pivot.sum().sort_values(ascending=False).head(top_aircraft).index]
-
-    fig, ax = plt.subplots(figsize=(7, 5))
-    sns.heatmap(
-        pivot,
-        cmap="rocket_r",
-        linewidths=0.3,
-        linecolor="#ffffff",
-        cbar_kws={"label": "Component count"},
-        ax=ax,
-    )
-    ax.set_xlabel("Aircraft registration")
-    ax.set_ylabel("Part name")
-    ax.set_title("Component heatmap: unique parts vs aircraft")
-    fig.tight_layout()
-    return fig
+    return overall_fig, detail_figs

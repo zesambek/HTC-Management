@@ -283,7 +283,12 @@ def main() -> None:
     with col4:
         st.pyplot(build_due_timeline_matplot(prepared), clear_figure=True)
 
-    st.pyplot(build_part_aircraft_heatmap(prepared), clear_figure=True)
+    heatmap_all, heatmap_details = build_part_aircraft_heatmap(prepared)
+    st.pyplot(heatmap_all, clear_figure=True)
+    detail_cols = st.columns(2)
+    for fig, col in zip(heatmap_details, detail_cols * 2):
+        with col:
+            st.pyplot(fig, clear_figure=True)
 
     st.subheader("Tabular breakdowns")
     tabs = st.tabs(["Aircraft", "Components", "Due buckets"])
