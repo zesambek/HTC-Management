@@ -21,6 +21,7 @@ from .visuals import (
     build_due_status_donut,
     build_top_components_matplot,
     build_due_timeline_matplot,
+    build_part_aircraft_heatmap,
 )
 from .profiling import analyze_column_types
 from .timeseries import build_due_time_series
@@ -46,6 +47,7 @@ __all__ = [
     "build_due_status_donut",
     "build_top_components_matplot",
     "build_due_timeline_matplot",
+    "build_part_aircraft_heatmap",
     "analyze_column_types",
     "build_due_time_series",
 ]

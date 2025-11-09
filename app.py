@@ -26,6 +26,7 @@ from htc_management.analytics import (
     build_due_status_donut,
     build_top_components_matplot,
     build_due_timeline_matplot,
+    build_part_aircraft_heatmap,
 )
 from htc_management.analytics.visuals import (
     build_due_time_series_chart,
@@ -281,6 +282,8 @@ def main() -> None:
         st.pyplot(build_top_components_matplot(prepared), clear_figure=True)
     with col4:
         st.pyplot(build_due_timeline_matplot(prepared), clear_figure=True)
+
+    st.pyplot(build_part_aircraft_heatmap(prepared), clear_figure=True)
 
     st.subheader("Tabular breakdowns")
     tabs = st.tabs(["Aircraft", "Components", "Due buckets"])
