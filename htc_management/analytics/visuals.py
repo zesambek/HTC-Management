@@ -308,7 +308,7 @@ def build_top_components_matplot(df: pd.DataFrame, *, top_n: int = 10):
         .sort_values("components", ascending=True)
     )
     fig, ax = plt.subplots(figsize=(6, 4))
-    sns.barplot(data=counts, x="components", y="part_name", palette="crest", ax=ax)
+    sns.barplot(data=counts, x="components", y="part_name", color=_BLUE, ax=ax)
     ax.set_xlabel("Components")
     ax.set_ylabel("")
     ax.set_title(f"Top {top_n} components by count")
@@ -383,10 +383,11 @@ def build_part_aircraft_heatmap(df: pd.DataFrame) -> Tuple[plt.Figure, list[plt.
             ax.axis("off")
             return fig
 
-        pivot = pivot.sort_values(pivot.sum(axis=1), ascending=False)
-        pivot = pivot.head(25)
+        row_order = pivot.sum(axis=1).sort_values(ascending=False).index
+        col_order = pivot.sum(axis=0).sort_values(ascending=False).index
+        pivot = pivot.loc[row_order, col_order]
 
-        fig, ax = plt.subplots(figsize=(8, 5))
+        fig, ax = plt.subplots(figsize=(min(10, 4 + 0.25 * len(col_order)), min(8, 4 + 0.25 * len(row_order))))
         sns.heatmap(
             pivot,
             cmap="mako",
@@ -402,7 +403,7 @@ def build_part_aircraft_heatmap(df: pd.DataFrame) -> Tuple[plt.Figure, list[plt.
         return fig
 
     overall_fig = _heatmap(working, "Part vs Aircraft exposure (all components)")
-    detail_figs = []
+    detail_figs: list[plt.Figure] = []
     for label in ["Overdue", "Due ≤ 30d", "Due ≤ 90d", "Due > 90d"]:
         subset = working[working["due_bucket"] == label]
         detail_figs.append(_heatmap(subset, f"{label} exposure"))
