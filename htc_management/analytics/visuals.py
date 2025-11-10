@@ -191,51 +191,59 @@ def create_days_distribution_plot(df: pd.DataFrame):
 
 
 def build_config_slot_due_scatter(df: pd.DataFrame, *, top_n: int = 20):
-    """Scatter plot of days-until-due by config slot (top N most common)."""
+    """Seaborn scatter with layered due windows and threshold markers."""
     required = {"config_slot", "due_date"}
     if df.empty or not required.issubset(df.columns):
-        return _empty_figure("Config slot or due date data unavailable.")
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.text(0.5, 0.5, "Config slot data unavailable", ha="center", va="center")
+        ax.axis("off")
+        return fig
 
     working = df.dropna(subset=["config_slot", "due_date"]).copy()
     if working.empty:
-        return _empty_figure("No config slot entries with due dates available.")
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.text(0.5, 0.5, "No config slot entries with due dates available", ha="center", va="center")
+        ax.axis("off")
+        return fig
 
     today = pd.Timestamp.utcnow().tz_localize(None).normalize()
     working["due_date"] = pd.to_datetime(working["due_date"]).dt.tz_localize(None)
-
-    if "days_until_due" not in working.columns:
-        working["days_until_due"] = (working["due_date"] - today).dt.total_seconds() / 86400.0
-    else:
-        mask_na = working["days_until_due"].isna()
-        working.loc[mask_na, "days_until_due"] = (working.loc[mask_na, "due_date"] - today).dt.total_seconds() / 86400.0
+    working["days_until_due"] = (
+        working["due_date"] - today
+    ).dt.total_seconds() / 86400.0
 
     counts = working["config_slot"].value_counts().head(top_n).index
     filtered = working[working["config_slot"].isin(counts)].copy()
     if filtered.empty:
-        return _empty_figure("Insufficient data after filtering top config slots.")
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.text(0.5, 0.5, "Insufficient slots after filtering", ha="center", va="center")
+        ax.axis("off")
+        return fig
 
-    hover_fields: list[str] = ["due_date"]
-    if "part_name" in filtered.columns:
-        hover_fields.append("part_name")
-    if "task_code" in filtered.columns:
-        hover_fields.append("task_code")
+    filtered["due_window"] = pd.cut(
+        filtered["days_until_due"],
+        bins=[-np.inf, 0, 30, 90, np.inf],
+        labels=["Overdue", "Due ≤ 30d", "Due ≤ 90d", "Due > 90d"],
+    )
 
-    color_field = "aircraft_registration" if "aircraft_registration" in filtered.columns else None
-
-    fig = px.scatter(
-        filtered.sort_values("days_until_due"),
+    fig, ax = plt.subplots(figsize=(10, 5))
+    sns.scatterplot(
+        data=filtered,
         x="days_until_due",
         y="config_slot",
-        color=color_field,
-        hover_data=hover_fields,
-        title=f"Due exposure by config slot (top {len(counts)} slots)",
-        labels={"days_until_due": "Days until due (negative = overdue)", "config_slot": "Config slot"},
+        hue="due_window",
+        palette=["#ef4444", "#f59e0b", "#22c55e", "#2563eb"],
+        ax=ax,
+        alpha=0.8,
     )
-    fig.update_layout(
-        height=420,
-        yaxis={"categoryorder": "total ascending"},
-        xaxis=dict(zeroline=True, zerolinecolor="#777", zerolinewidth=1),
-    )
+    ax.axvline(0, color="#475467", linestyle="--", linewidth=1)
+    ax.axvline(30, color="#22c55e", linestyle=":", linewidth=1)
+    ax.axvline(90, color="#2563eb", linestyle=":", linewidth=1)
+    ax.set_xlabel("Days until due (negative = overdue)")
+    ax.set_ylabel("Config slot")
+    ax.set_title(f"Due exposure by config slot (top {len(counts)} slots)")
+    ax.legend(title="Due window", loc="upper right")
+    fig.tight_layout()
     return fig
 
 
