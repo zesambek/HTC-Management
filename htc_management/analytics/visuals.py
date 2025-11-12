@@ -397,26 +397,25 @@ def build_part_aircraft_heatmap(df: pd.DataFrame, *, max_parts: int = 40, max_ai
             return 3
         return 4
 
-    matrix = pivot.applymap(classify).astype(int)
+    matrix = pivot.apply(lambda col: col.map(classify)).astype(float).fillna(0).astype(int)
     colors = ["#0f172a", "#ef4444", "#f97316", "#fde047", "#22c55e"]
+    labels = ["Not applicable", "Overdue", "Due ≤ 30d", "Due ≤ 60d", "Due > 60d"]
     cmap = ListedColormap(colors)
 
-    fig, ax = plt.subplots(figsize=(max(9, 0.35 * len(col_order)), max(6, 0.35 * len(row_order))))
+    fig, ax = plt.subplots(figsize=(max(9, 0.35 * len(col_order)), max(7, 0.35 * len(row_order))))
     ax.imshow(matrix.values, cmap=cmap, vmin=-0.5, vmax=len(colors) - 0.5, aspect="auto")
-    ax.set_xticks(range(len(col_order)))
+    ax.set_xticks(np.arange(len(col_order)))
     ax.set_xticklabels(col_order, rotation=45, ha="right")
-    ax.set_yticks(range(len(row_order)))
+    ax.set_yticks(np.arange(len(row_order)))
     ax.set_yticklabels(row_order, va="center")
     ax.set_xlabel("Aircraft registration")
     ax.set_ylabel("Part name")
     ax.set_title("Part vs aircraft due status (earliest obligation)")
 
-    cbar = fig.colorbar(
-        ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=-0.5, vmax=len(colors) - 0.5)),
-        ticks=range(len(colors)),
-        ax=ax,
-    )
-    cbar.ax.set_yticklabels(["Not applicable", "Overdue", "Due ≤ 30d", "Due ≤ 60d", "Due > 60d"])
+    legend_handles = [
+        Patch(facecolor=color, edgecolor="none", label=label) for color, label in zip(colors, labels)
+    ]
+    ax.legend(handles=legend_handles, loc="upper left", bbox_to_anchor=(1.01, 1), frameon=False, title="Status")
 
     fig.tight_layout()
     return fig
