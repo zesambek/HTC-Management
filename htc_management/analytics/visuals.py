@@ -9,6 +9,8 @@ import pandas as pd
 import plotly.express as px
 import statsmodels.api as sm
 from matplotlib import pyplot as plt
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import ListedColormap
 import seaborn as sns
 
 sns.set_theme(style="whitegrid")
