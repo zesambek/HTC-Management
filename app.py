@@ -79,6 +79,17 @@ def _figure_to_pdf_bytes(fig):
         return None
 
 
+def _matplot_to_pdf_bytes(fig):
+    try:
+        buffer = BytesIO()
+        fig.savefig(buffer, format="pdf", bbox_inches="tight")
+        buffer.seek(0)
+        return buffer.getvalue()
+    except Exception as exc:  # noqa: BLE001
+        st.warning(f"PDF export unavailable for this chart: {exc}")
+        return None
+
+
 def _df_to_excel_bytes(df: pd.DataFrame, *, sheet_name: str = "Filtered") -> bytes:
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:  # type: ignore[arg-type]
@@ -283,7 +294,17 @@ def main() -> None:
     with col4:
         st.pyplot(build_due_timeline_matplot(prepared), clear_figure=True)
 
-    st.pyplot(build_part_aircraft_heatmap(prepared), clear_figure=True)
+    heatmap_fig = build_part_aircraft_heatmap(prepared)
+    st.pyplot(heatmap_fig, clear_figure=True)
+    heatmap_pdf = _matplot_to_pdf_bytes(heatmap_fig)
+    if heatmap_pdf:
+        _download_bytes(
+            heatmap_pdf,
+            file_name="part_aircraft_heatmap.pdf",
+            mime="application/pdf",
+            label="Download heatmap (PDF)",
+            key="heatmap_pdf",
+        )
 
     st.subheader("Tabular breakdowns")
     tabs = st.tabs(["Aircraft", "Components", "Due buckets"])
