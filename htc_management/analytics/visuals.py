@@ -358,62 +358,63 @@ def build_due_timeline_matplot(df: pd.DataFrame):
     return fig
 
 
-def build_part_aircraft_heatmap(df: pd.DataFrame) -> Tuple[plt.Figure, list[plt.Figure]]:
-    """
-    Generate stacked heatmaps showing unique part exposure per aircraft segmented by due windows.
-
-    Returns a tuple of (overall figure, [overdue_fig, due_30_fig, due_90_fig, gt_90_fig]).
-    """
+def build_part_aircraft_heatmap(df: pd.DataFrame, *, max_parts: int = 40, max_aircraft: int = 30) -> plt.Figure:
+    """Color-coded heatmap where each cell reflects earliest due status for part vs aircraft."""
 
     required = {"part_name", "aircraft_registration", "days_until_due"}
     if df.empty or required - set(df.columns):
         fig, ax = plt.subplots(figsize=(4, 3))
         ax.text(0.5, 0.5, "Heatmap unavailable", ha="center", va="center")
         ax.axis("off")
-        return fig, []
-
-    working = df.copy()
-    working["due_bucket"] = pd.cut(
-        working["days_until_due"],
-        bins=[-np.inf, 0, 30, 90, np.inf],
-        labels=["Overdue", "Due ≤ 30d", "Due ≤ 90d", "Due > 90d"],
-    )
-
-    def _heatmap(frame: pd.DataFrame, title: str) -> plt.Figure:
-        pivot = (
-            frame.groupby(["part_name", "aircraft_registration"])
-            .size()
-            .unstack(fill_value=0)
-        )
-        if pivot.empty:
-            fig, ax = plt.subplots(figsize=(4, 3))
-            ax.text(0.5, 0.5, f"{title} unavailable", ha="center", va="center")
-            ax.axis("off")
-            return fig
-
-        row_order = pivot.sum(axis=1).sort_values(ascending=False).index
-        col_order = pivot.sum(axis=0).sort_values(ascending=False).index
-        pivot = pivot.loc[row_order, col_order]
-
-        fig, ax = plt.subplots(figsize=(min(10, 4 + 0.25 * len(col_order)), min(8, 4 + 0.25 * len(row_order))))
-        sns.heatmap(
-            pivot,
-            cmap="mako",
-            linewidths=0.3,
-            linecolor="#ffffff",
-            cbar_kws={"label": "Component count"},
-            ax=ax,
-        )
-        ax.set_xlabel("Aircraft registration")
-        ax.set_ylabel("Part name")
-        ax.set_title(title)
-        fig.tight_layout()
         return fig
 
-    overall_fig = _heatmap(working, "Part vs Aircraft exposure (all components)")
-    detail_figs: list[plt.Figure] = []
-    for label in ["Overdue", "Due ≤ 30d", "Due ≤ 90d", "Due > 90d"]:
-        subset = working[working["due_bucket"] == label]
-        detail_figs.append(_heatmap(subset, f"{label} exposure"))
+    pivot = df.pivot_table(
+        index="part_name",
+        columns="aircraft_registration",
+        values="days_until_due",
+        aggfunc="min",
+    )
+    if pivot.empty:
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.text(0.5, 0.5, "Heatmap unavailable", ha="center", va="center")
+        ax.axis("off")
+        return fig
 
-    return overall_fig, detail_figs
+    row_order = pivot.notna().sum(axis=1).sort_values(ascending=False).index[:max_parts]
+    col_order = pivot.notna().sum(axis=0).sort_values(ascending=False).index[:max_aircraft]
+    pivot = pivot.loc[row_order, col_order]
+
+    def classify(value: float) -> int:
+        if pd.isna(value):
+            return 0
+        if value < 0:
+            return 1
+        if value <= 30:
+            return 2
+        if value <= 60:
+            return 3
+        return 4
+
+    matrix = pivot.applymap(classify).astype(int)
+    colors = ["#0f172a", "#ef4444", "#f97316", "#fde047", "#22c55e"]
+    cmap = ListedColormap(colors)
+
+    fig, ax = plt.subplots(figsize=(max(8, 0.3 * len(col_order)), max(6, 0.25 * len(row_order))))
+    im = ax.imshow(matrix.values, cmap=cmap, vmin=-0.5, vmax=len(colors) - 0.5, aspect="auto")
+    ax.set_xticks(range(len(col_order)))
+    ax.set_xticklabels(col_order, rotation=45, ha="right")
+    ax.set_yticks(range(len(row_order)))
+    ax.set_yticklabels(row_order)
+    ax.set_xlabel("Aircraft registration")
+    ax.set_ylabel("Part name")
+    ax.set_title("Part vs aircraft due status (earliest obligation)")
+
+    cbar = fig.colorbar(
+        ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=-0.5, vmax=len(colors) - 0.5)),
+        ticks=range(len(colors)),
+        ax=ax,
+    )
+    cbar.ax.set_yticklabels(["Not applicable", "Overdue", "Due ≤ 30d", "Due ≤ 60d", "Due > 60d"])
+
+    fig.tight_layout()
+    return fig
