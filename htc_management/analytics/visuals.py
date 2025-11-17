@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Tuple
+import textwrap
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,7 @@ import statsmodels.api as sm
 from matplotlib import pyplot as plt
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import ListedColormap
+from matplotlib.patches import Patch
 import seaborn as sns
 
 sns.set_theme(style="whitegrid")
@@ -360,7 +362,12 @@ def build_due_timeline_matplot(df: pd.DataFrame):
     return fig
 
 
-def build_part_aircraft_heatmap(df: pd.DataFrame, *, max_parts: int = 40, max_aircraft: int = 30) -> plt.Figure:
+def build_part_aircraft_heatmap(
+    df: pd.DataFrame,
+    *,
+    max_parts: int | None = None,
+    max_aircraft: int | None = 30,
+) -> plt.Figure:
     """Color-coded heatmap where each cell reflects earliest due status for part vs aircraft."""
 
     required = {"part_name", "aircraft_registration", "days_until_due"}
@@ -370,8 +377,44 @@ def build_part_aircraft_heatmap(df: pd.DataFrame, *, max_parts: int = 40, max_ai
         ax.axis("off")
         return fig
 
-    pivot = df.pivot_table(
-        index="part_name",
+    # Build richer labels so that identical OEM parts installed in different positions remain distinct.
+    working = df.copy()
+    label_column = "__heatmap_row_label"
+
+    def _clean_value(value, *, default: str = "") -> str:
+        if value is None or pd.isna(value):
+            return default
+        text = str(value).strip()
+        if not text or text.lower() == "nan":
+            return default
+        return text
+
+    include_oem = "oem_part_number" in working.columns
+    include_position = "position" in working.columns
+    wrap_width = 34
+
+    def _wrap_part(text: str) -> str:
+        cleaned = _clean_value(text, default="Unnamed part")
+        return textwrap.fill(cleaned, width=wrap_width)
+
+    def _compose_label(row: pd.Series) -> str:
+        base = _wrap_part(row.get("part_name"))
+        info_parts: list[str] = []
+        if include_oem:
+            oem_value = _clean_value(row.get("oem_part_number"))
+            if oem_value:
+                info_parts.append(f"OEM: {oem_value}")
+        if include_position:
+            position_value = _clean_value(row.get("position"))
+            if position_value:
+                info_parts.append(f"Pos: {position_value}")
+        if info_parts:
+            return f"{base}\n{' | '.join(info_parts)}"
+        return base
+
+    working[label_column] = working.apply(_compose_label, axis=1)
+    pivot = working.pivot_table(
+        index=label_column,
         columns="aircraft_registration",
         values="days_until_due",
         aggfunc="min",
@@ -382,40 +425,100 @@ def build_part_aircraft_heatmap(df: pd.DataFrame, *, max_parts: int = 40, max_ai
         ax.axis("off")
         return fig
 
-    row_order = pivot.notna().sum(axis=1).sort_values(ascending=False).index[:max_parts]
-    col_order = pivot.notna().sum(axis=0).sort_values(ascending=False).index[:max_aircraft]
+    row_counts = pivot.notna().sum(axis=1)
+    row_candidates = pd.Index(
+        sorted(row_counts.index, key=lambda part: (-row_counts[part], str(part).lower()))
+    )
+    if max_parts is not None:
+        row_candidates = row_candidates[:max_parts]
+    row_order = row_candidates
+
+    col_counts = pivot.notna().sum(axis=0)
+    col_candidates = pd.Index(
+        sorted(col_counts.index, key=lambda col: (-col_counts[col], str(col).lower()))
+    )
+    if max_aircraft is not None:
+        col_candidates = col_candidates[:max_aircraft]
+    col_order = col_candidates
     pivot = pivot.loc[row_order, col_order]
 
-    def classify(value: float) -> int:
-        if pd.isna(value):
-            return 0
-        if value < 0:
-            return 1
-        if value <= 30:
-            return 2
-        if value <= 60:
-            return 3
-        return 4
+    row_labels = list(row_order)
 
-    matrix = pivot.apply(lambda col: col.map(classify)).astype(float).fillna(0).astype(int)
+    values = pivot.to_numpy(dtype=float)
+    matrix = np.zeros_like(values, dtype=int)
+    with np.errstate(invalid="ignore"):
+        overdue_mask = values < 0
+        due_30_mask = (values >= 0) & (values <= 30)
+        due_60_mask = (values > 30) & (values <= 60)
+        due_60_plus_mask = values > 60
+    matrix[overdue_mask] = 1
+    matrix[due_30_mask] = 2
+    matrix[due_60_mask] = 3
+    matrix[due_60_plus_mask] = 4
+    matrix = pd.DataFrame(matrix, index=row_labels, columns=col_order)
     colors = ["#0f172a", "#ef4444", "#f97316", "#fde047", "#22c55e"]
     labels = ["Not applicable", "Overdue", "Due ≤ 30d", "Due ≤ 60d", "Due > 60d"]
     cmap = ListedColormap(colors)
 
-    fig, ax = plt.subplots(figsize=(max(9, 0.35 * len(col_order)), max(7, 0.35 * len(row_order))))
-    ax.imshow(matrix.values, cmap=cmap, vmin=-0.5, vmax=len(colors) - 0.5, aspect="auto")
-    ax.set_xticks(np.arange(len(col_order)))
-    ax.set_xticklabels(col_order, rotation=45, ha="right")
-    ax.set_yticks(np.arange(len(row_order)))
-    ax.set_yticklabels(row_order, va="center")
-    ax.set_xlabel("Aircraft registration")
-    ax.set_ylabel("Part name")
-    ax.set_title("Part vs aircraft due status (earliest obligation)")
+    fig_width = max(10, 0.5 * len(col_order))
+    fig_height = max(6, 0.5 * len(row_order))
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+    fig.patch.set_facecolor("#f8fafc")
+    sns.heatmap(
+        matrix,
+        cmap=cmap,
+        vmin=-0.5,
+        vmax=len(colors) - 0.5,
+        ax=ax,
+        cbar=False,
+        linewidths=0.35,
+        linecolor="#f1f5f9",  # subtle grid so cells do not look double-width
+        square=False,
+        rasterized=False,
+    )
+    ax.set_facecolor("#f8fafc")
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.set_xlabel("Aircraft registration", labelpad=14, fontweight="semibold")
+    ax.set_ylabel("Part / OEM part number / Position", labelpad=12, fontweight="semibold")
+    ax.set_title(
+        "Part vs aircraft due status (earliest obligation)",
+        pad=18,
+        fontweight="semibold",
+    )
+
+    x_positions = np.arange(0.5, len(col_order) + 0.5)
+    ax.set_xticks(x_positions)
+    ax.tick_params(axis="x", bottom=True, labelbottom=True, top=False, labeltop=False, pad=12)
+    ax.set_xticklabels(col_order, rotation=90, ha="center", fontsize=9)
+
+    ax_top = ax.twiny()
+    ax_top.set_xlim(ax.get_xlim())
+    ax_top.set_xticks(x_positions)
+    ax_top.set_xticklabels(col_order, rotation=45, ha="left", rotation_mode="anchor", fontsize=9)
+    ax_top.tick_params(axis="x", bottom=False, labelbottom=False, top=True, labeltop=True, pad=6, length=0)
+    ax_top.xaxis.set_label_position("top")
+    ax_top.set_xlabel("Aircraft registration", labelpad=14, fontweight="semibold")
+    for spine in ("top", "left", "right", "bottom"):
+        ax_top.spines[spine].set_visible(False)
+
+    y_positions = np.arange(0.5, len(row_labels) + 0.5)
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels(row_labels, rotation=0, fontsize=9)
+    ax.tick_params(axis="y", pad=6)
+    for label in ax.get_yticklabels():
+        label.set_horizontalalignment("right")
 
     legend_handles = [
         Patch(facecolor=color, edgecolor="none", label=label) for color, label in zip(colors, labels)
     ]
-    ax.legend(handles=legend_handles, loc="upper left", bbox_to_anchor=(1.01, 1), frameon=False, title="Status")
+    ax.legend(
+        handles=legend_handles,
+        loc="upper left",
+        bbox_to_anchor=(1.01, 1),
+        frameon=False,
+        title="Status",
+    )
 
     fig.tight_layout()
     return fig
